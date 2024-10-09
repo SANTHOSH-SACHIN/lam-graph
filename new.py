@@ -605,84 +605,21 @@ with st.expander("Graph Centralities", expanded=False):
 import pandas as pd
 with st.expander("Manage Nodes", expanded=False):
     option = st.radio("Choose an action:", ("Add Nodes", "Delete Nodes"))
-if option == "Add Nodes":
-    st.write("Upload a CSV file containing node features (excluding ID) and parent-child relationships.")
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    if option == "Add Nodes":
+        st.write("Upload a CSV file containing node features (excluding ID) and parent-child relationships.")
+        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
-    if uploaded_file is not None:
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(uploaded_file)
-
-        # Display the DataFrame for user confirmation
-        st.write("Data Preview:")
-        st.dataframe(df)
-
-        if st.button("Add Nodes"):
-            try:
-                # Measure time and memory before adding nodes
-                start_time = time.time()
-                process = psutil.Process(os.getpid())
-                mem_before = process.memory_info().rss 
-
-                # Load existing nodes and edges
-                nodes = load_mmap_data('nodes.mmap', node_dtype)
-                edges = load_mmap_data('edges.mmap', edge_dtype)
-
-                # Determine the current maximum ID for new nodes
-                current_max_id = nodes['id'].max() + 1
-
-                # Prepare new nodes
-                new_nodes = np.zeros(len(df), dtype=node_dtype)
-                new_nodes['id'] = np.arange(current_max_id, current_max_id + len(df))
-                
-                # Fill in other features from the DataFrame
-                for column in df.columns:
-                    if column in node_dtype.names[1:]:  # Exclude 'id'
-                        new_nodes[column] = df[column].values
-
-                # Append new nodes to existing nodes
-                combined_nodes = np.concatenate((nodes, new_nodes))
-                
-                # Save updated nodes back to memory-mapped file
-                save_to_mmap(combined_nodes, 'nodes.mmap')
-
-                # Process parent-child relationships to create edges
-                for index, row in df.iterrows():
-                    parent_id = row.get('parent_id')
-                    child_id = row.get('child_id')
-
-                    if pd.notna(parent_id):  # Ensure parent ID is present
-                        # Create an edge from parent to the newly added node
-                        edges = np.append(edges, np.array([(parent_id, current_max_id + index, 1)], dtype=edge_dtype))
-
-                    if pd.notna(child_id):  # Check if child ID is present before creating an outgoing edge
-                        edges = np.append(edges, np.array([(current_max_id + index, child_id, 1)], dtype=edge_dtype))
-
-                # Save updated edges back to memory-mapped file
-                save_to_mmap(edges, 'edges.mmap')
-
-                end_time = time.time()
-                mem_after = process.memory_info().rss
-
-                st.success("Nodes added successfully!")
-                st.write(f"Time taken to add nodes: {end_time - start_time:.4f} seconds")
-                st.write(f"Memory used during addition: {(mem_after - mem_before) / (1024 ** 2):.4f} MB")
-
-            except Exception as e:
-                st.error(f"Error adding nodes: {e}")
-                
-    elif option == "Delete Nodes":
-        st.write("Upload a CSV file containing Node IDs to delete (separated by commas).")
-        delete_file = st.file_uploader("Choose a CSV file for deletion", type="csv")
-
-        if delete_file is not None:
+        if uploaded_file is not None:
             # Read the CSV file into a DataFrame
-            delete_df = pd.read_csv(delete_file, header=None)
-            delete_ids = delete_df[0].astype(int).tolist()  # Assuming IDs are in the first column
+            df = pd.read_csv(uploaded_file)
 
-            if st.button("Delete Nodes"):
+            # Display the DataFrame for user confirmation
+            st.write("Data Preview:")
+            st.dataframe(df)
+
+            if st.button("Add Nodes"):
                 try:
-                    # Measure time and memory before deletion
+                    # Measure time and memory before adding nodes
                     start_time = time.time()
                     process = psutil.Process(os.getpid())
                     mem_before = process.memory_info().rss 
@@ -691,25 +628,88 @@ if option == "Add Nodes":
                     nodes = load_mmap_data('nodes.mmap', node_dtype)
                     edges = load_mmap_data('edges.mmap', edge_dtype)
 
-                    # Create a set of IDs to delete for quick lookup
-                    ids_to_delete = set(delete_ids)
+                    # Determine the current maximum ID for new nodes
+                    current_max_id = nodes['id'].max() + 1
 
-                    # Filter out the nodes that are not in the deletion list
-                    filtered_nodes = nodes[~np.isin(nodes['id'], ids_to_delete)]
+                    # Prepare new nodes
+                    new_nodes = np.zeros(len(df), dtype=node_dtype)
+                    new_nodes['id'] = np.arange(current_max_id, current_max_id + len(df))
+                    
+                    # Fill in other features from the DataFrame
+                    for column in df.columns:
+                        if column in node_dtype.names[1:]:  # Exclude 'id'
+                            new_nodes[column] = df[column].values
 
-                    # Create a mask for edges to keep only those that do not connect to deleted nodes
-                    filtered_edges = edges[~np.isin(edges['source_id'], ids_to_delete) & ~np.isin(edges['target_id'], ids_to_delete)]
+                    # Append new nodes to existing nodes
+                    combined_nodes = np.concatenate((nodes, new_nodes))
+                    
+                    # Save updated nodes back to memory-mapped file
+                    save_to_mmap(combined_nodes, 'nodes.mmap')
 
-                    # Save updated nodes and edges back to memory-mapped files
-                    save_to_mmap(filtered_nodes, 'nodes.mmap')
-                    save_to_mmap(filtered_edges, 'edges.mmap')
+                    # Process parent-child relationships to create edges
+                    for index, row in df.iterrows():
+                        parent_id = row.get('parent_id')
+                        child_id = row.get('child_id')
+
+                        if pd.notna(parent_id):  # Ensure parent ID is present
+                            # Create an edge from parent to the newly added node
+                            edges = np.append(edges, np.array([(parent_id, current_max_id + index, 1)], dtype=edge_dtype))
+
+                        if pd.notna(child_id):  # Check if child ID is present before creating an outgoing edge
+                            edges = np.append(edges, np.array([(current_max_id + index, child_id, 1)], dtype=edge_dtype))
+
+                    # Save updated edges back to memory-mapped file
+                    save_to_mmap(edges, 'edges.mmap')
 
                     end_time = time.time()
                     mem_after = process.memory_info().rss
 
-                    st.success(f"{ids_to_delete} Nodes and their corresponding edges deleted successfully!")
-                    st.write(f"Time taken to delete nodes: {end_time - start_time:.4f} seconds")
-                    st.write(f"Memory used during deletion: {(mem_after - mem_before) / (1024 ** 2):.4f} MB")
+                    st.success("Nodes added successfully!")
+                    st.write(f"Time taken to add nodes: {end_time - start_time:.4f} seconds")
+                    st.write(f"Memory used during addition: {(mem_after - mem_before) / (1024 ** 2):.4f} MB")
 
                 except Exception as e:
-                    st.error(f"Error deleting nodes: {e}")
+                    st.error(f"Error adding nodes: {e}")
+                    
+        elif option == "Delete Nodes":
+            st.write("Upload a CSV file containing Node IDs to delete (separated by commas).")
+            delete_file = st.file_uploader("Choose a CSV file for deletion", type="csv")
+
+            if delete_file is not None:
+                # Read the CSV file into a DataFrame
+                delete_df = pd.read_csv(delete_file, header=None)
+                delete_ids = delete_df[0].astype(int).tolist()  # Assuming IDs are in the first column
+
+                if st.button("Delete Nodes"):
+                    try:
+                        # Measure time and memory before deletion
+                        start_time = time.time()
+                        process = psutil.Process(os.getpid())
+                        mem_before = process.memory_info().rss 
+
+                        # Load existing nodes and edges
+                        nodes = load_mmap_data('nodes.mmap', node_dtype)
+                        edges = load_mmap_data('edges.mmap', edge_dtype)
+
+                        # Create a set of IDs to delete for quick lookup
+                        ids_to_delete = set(delete_ids)
+
+                        # Filter out the nodes that are not in the deletion list
+                        filtered_nodes = nodes[~np.isin(nodes['id'], ids_to_delete)]
+
+                        # Create a mask for edges to keep only those that do not connect to deleted nodes
+                        filtered_edges = edges[~np.isin(edges['source_id'], ids_to_delete) & ~np.isin(edges['target_id'], ids_to_delete)]
+
+                        # Save updated nodes and edges back to memory-mapped files
+                        save_to_mmap(filtered_nodes, 'nodes.mmap')
+                        save_to_mmap(filtered_edges, 'edges.mmap')
+
+                        end_time = time.time()
+                        mem_after = process.memory_info().rss
+
+                        st.success(f"{ids_to_delete} Nodes and their corresponding edges deleted successfully!")
+                        st.write(f"Time taken to delete nodes: {end_time - start_time:.4f} seconds")
+                        st.write(f"Memory used during deletion: {(mem_after - mem_before) / (1024 ** 2):.4f} MB")
+
+                    except Exception as e:
+                        st.error(f"Error deleting nodes: {e}")
